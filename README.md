@@ -2,7 +2,7 @@
 Reggae Horn project for motorcycle
 
 This is a fun project to create a horn for your motorcycle, but can be used for just about anything
-that you can think of. Please have fun with it and please use it responsibly.
+that you can think of. Have fun with it and please use it responsibly.
 
 This program was written using Great Cow Basic v.0.97. GCB is totally
 free and can be downloaded from http://gcbasic.sourceforge.net. You
