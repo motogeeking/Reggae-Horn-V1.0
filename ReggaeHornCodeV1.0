@@ -1,0 +1,248 @@
+'***************************************************************************
+'*                                                                         *
+'*                         Reggae Horn v1.0                                *
+'*                           by MotoGeek                                   *
+'*                                                                         *
+'*  MP3 sound files must be put in a folder named "MP3" on the root of     *
+'*  your microTF card.                                                     *
+'*                                                                         *
+'*  Sound files must be named 0001.mp3, 0002.mp3, etc. or you can name     *
+'*  the files 0001MacSound.mp3, 0002ReggaeHorn.mp3, 0003BikeBell.mp3,      *
+'*  etc., but must start with the 4 digit sequntial number scheme.         *
+'*                                                                         *
+'*  Upon power up, the program will fetch the total number of MP3 files    *
+'*  you loaded on the micro TF card so it will be able to cycle through    *
+'*  them and allow you to pick which one you want to use as the current    *
+'*  horn sound (see below).                                                *
+'*                                                                         *
+'*  First sound file (0001.mp3) will play when unit is first powered up.   *
+'*  I chose the Macintosh start-up sound for this, just for fun...         *
+'*  Volume for this file is set in variable "StartVol" so that it can      *
+'*  be set to a lower level than the rest of the horn sounds, since the    *
+'*  engine is not yet running.                                             *
+'*                                                                         *
+'*  Sound files 0002.mp3 and up are the actual selectable horn sounds.     *
+'*                                                                         *
+'*  Since there is only one switch, we have to creatively use it to do     *
+'*  3 different things... change the horn volume, select one of possibly   *
+'*  many horn sounds and of course, as a button to activate the horn.      *
+'*                                                                         *
+'*  Pressing and holing the horn button while turning the power (key) on   *
+'*  will allow you to change the horn sound volume. As you keep holding    *
+'*  the button, the unit will play the horn sound for one second and stop, *
+'*  then increase the volume a bit and play the horn sound again. It will  *
+'*  cycle through 10 volume levels, from low to high as long as you keep   *
+'*  holding the button. When you reach the volume you like, just release   *
+'*  the button and that volume will be set. You can now start your         *
+'*  vehicle as normal.                                                     *
+'*                                                                         *
+'*  Pressing the horn button will play the current sound file for as long  *
+'*  as it is pressed, UP TO 5 SECONDS!  This can be changed with the       *
+'*  variable "PressTimeOut". If horn button is pressed pass this amount    *
+'*  of time, unit will cycle through all stored MP3 sounds for one second  *
+'*  each at a volume set by variable "CycleVol". This allows you to cycle  *
+'*  through the sounds at a more comfortable volume level. To select the   *
+'*  current sound, simply release the horn button when you hear it.        *
+'*                                                                         *
+'*  This program was written using Great Cow Basic v.0.97. GCB is totally  *
+'*  free and can be downloaded from http://gcbasic.sourceforge.net. You    *
+'*  will need a pickit 3 to program your PIC microcontroller.              *
+'*                                                                         *
+'*  THIS UNIT IS A NOVELTY AND IS NOT INTENDED AS A SUBSTITUTE FOR A DOT   *
+'*  APPROVED MOTOR VEHICLE HORN! USE RESPONSIBLY!                          *
+'*                                                                         *
+'***************************************************************************
+
+#chip 12F1840, 32               ' Define chip and speed (32Mhz internal osc.)
+
+#define TX portA.0              ' Pin 7  A.0, TX serial port (USART)
+#define RX portA.1              ' Pin 6  A.1, RX serial port (USART)
+#define HornSw portA.2          ' Pin 5  A.2, Horn switch input from opto -> low = on
+#define MP3Busy portA.3         ' Pin 4  A.3, Busy line from MP3 -> low = busy
+
+#define LED portA.5             ' Pin 2
+
+#define USART_BAUD_RATE 9600    ' Initializes USART port with 9600 baud
+#define USART_BLOCKING          ' wait for USART to finish receiving or transmitting
+
+dir TX out                      ' Set pin 7 to output - TX out to MP3 module RX
+dir RX in                       ' Set pin 6 to input - RX in from MP3 module TX
+dir MP3Busy in                  ' Set pin 4 to input
+dir HornSw in                   ' Set pin 5 to input
+dir LED out
+
+On Interrupt UsartRX1Ready call MP3GetData 'Set up interrupt for receiving data
+IntOff                          ' Turn interrupt off until needed
+
+dim CheckSum as word            ' CheckSum is word - MSB, LSB
+dim CmdAdd as word              ' Added up command bytes 2 - 7
+
+dim RecData(10)                 ' Set up MP3 player received data array
+RecData = 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00      ' 10 byte RX array
+
+dim Cmd(10)                     ' Set up MP3 player send command array
+Cmd = 0x7E, 0xFF, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xEF          ' 10 byte TX array
+
+wait 1 s                        ' Give MP3 player time to initialize
+
+IntOn                           ' Turn interrupt on now
+IndexPtr = 1                    ' Set RecData index pointer to 1
+MP3QueryFiles                   ' MP3 command query how many MP3s on microTF card
+wait 150 ms                     ' Wait a bit to collect 10 bytes from MP3 module
+IntOff                          ' Turn interrupt back off
+
+TotalSounds = RecData(7)        ' # of MP3s on microTF card (7th byte of returned data)
+StartVol = 15                   ' Start sound (0001.mp3) volume level (1 - 30)
+CycleVol = 15                   ' Volume level during horn sound selection process (1 - 30)
+PressTimeOut = 5                ' # of seconds to press horn switch before sound change
+
+EPRead 0, SoundNum              ' Read saved horn sound file number
+EPRead 1, HornVol               ' Read saved horn sound volume level
+
+' If first ever power-up, then...
+
+if SoundNum < 2 or SoundNum > TotalSounds then
+  SoundNum = 2                  ' set SoundNum to 2nd sound file (0002.mp3)
+  EPWrite 0, SoundNum           ' Save current sound number to Eprom
+end if                          ' SoundNum is 2 or greater, so carry on...
+
+if HornVol < 1 or HornVol > 30 then
+  HornVol = 10                  ' set HornVol to medium
+  EPWrite 1, HornVol            ' Save current sound number to Eprom
+end if                          ' HornVol is in range, so carry on...
+
+' If horn switch pressed during power up to change volume, then...
+
+if HornSw = 0 then              ' Horn Switch is pressed at power up
+  HornVol = 3                   ' Set initial horn volume to low
+
+  NextVolume:                   ' Just a spot (label) to jump to
+
+  MP3Vol HornVol                ' MP3 command set new horn volume
+  wait 150 ms                   ' Wait a bit before sending next command
+  MP3Play SoundNum              ' MP3 command play current horn sound...
+  wait 1 s                      ' for one second
+  MP3Stop                       ' Stop playing that sound
+  wait 500 ms                   ' Wait half second
+  if HornSw = 1 then            ' If horn switch released, select current horn volume...
+    EPWrite 1, HornVol          ' Save selected horn volume to Eprom and...
+    goto StartUp                ' Begin normal start-up
+  end if                        ' if not...
+  HornVol = HornVol + 3         ' Increase horn volume by 3
+  if HornVol > 30 then HornVol = 3  'Reached hightest horn volume, start over
+  goto NextVolume               ' Try new horn volume since horn switch is still pressed
+end if                          ' Horn switch is not pressed at start up, so carry on...
+
+StartUp:                        ' Just a spot (label) to jump to
+
+MP3Vol StartVol                 ' Set start-up sound volume
+wait 150 ms                     ' Wait a bit before sending next command
+
+MP3Play 1                       ' Play track #1 (Start-up sound)
+wait 150 ms                     ' Wait a bit for MP3 module busy pin to go low (playing)
+
+wait until MP3Busy = 1          ' Wait here until start sound is done
+
+MP3Vol HornVol                  ' MP3 command set horn sound volume level
+
+Main:                           ' This is where it all begins (label)
+
+wait until HornSw = 0           ' Wait here until horn switch is pressed
+wait 30 ms                      ' Debounce time for Horn Switch
+if HornSw = 1 then goto Main    ' Horn switch still pressed? Nope, just a glitch, start over
+
+MP3Play SoundNum                ' MP3 command play current horn sound
+
+HornCount = 0                   ' Initialize pressed button counter
+
+do while HornSw = 0             ' Do the following stuff while horn switch is pressed
+  wait 100 ms                   ' wait a tenth of a second
+
+  HornCount = HornCount + 1     ' Increment pressed button counter (each loop = 100ms +)
+
+  if HornCount > (PressTimeOut * 10) then    ' If PressTimeOut * 10 * 100 ms happened...
+    MP3Stop                     ' MP3 command to stop if currently playing
+    wait 150 ms                 ' Wait a bit before sending next command
+    MP3Vol CycleVol             ' MP3 command set cycle sound volume
+    wait 500 ms
+
+    NextSound:                  ' Just a spot (label) to jump to
+
+    SoundNum = SoundNum + 1     ' Increment to next sound file
+    if SoundNum > TotalSounds then SoundNum = 2  ' Reached last file, start over
+    MP3Play SoundNum            ' MP3 command play next horn sound...
+    wait 1 s                    ' for one second
+    MP3Stop                     ' Stop playing that sound
+    wait 500 ms                 ' Wait half second before playing next sound
+
+    if HornSw = 1 then          ' If horn switch released, select current sound
+      EPWrite 0, SoundNum       ' Save selected sound file and...
+      MP3Vol HornVol            ' Reload normal horn volume and...
+      wait 150 ms
+      goto Main                 ' go back and wait for horn switch
+    end if                      ' if not then...
+    goto NextSound              ' Horn switch still pressed, start selection process over
+  end if                        ' if HornCount is not reached yet, then...
+loop                            ' Keep playing current sound while horn switch is pressed
+
+MP3Stop                         ' Horn switch released, stop playing sound
+wait 100 ms
+
+goto Main                       ' Go back and wait for horn switch
+
+'The following are subroutines to communicate serially(?) with the MP3 module...
+
+'*************** MP3 Query # of Files *****************
+Sub MP3QueryFiles
+Cmd(4) = 0x48                   ' Query total MP3 files command
+Cmd(7) = 0x00
+MP3SendCmd                      ' Send the 10 byte command (last subroutine below)
+end sub
+
+'******************** MP3 Stop ************************
+Sub MP3Stop
+Cmd(4) = 0x16                     ' Stop command
+Cmd(7) = 0x00
+MP3SendCmd                        ' Send the 10 byte command (last subroutine below)
+end sub
+
+'****************** MP3 Play Track ********************
+sub MP3Play(Track)
+Cmd(4) = 0x12                   ' Play command
+Cmd(7) = Track                  ' Play parameter - Track number on MicroTF card
+MP3SendCmd                      ' Send the 10 byte command (last subroutine below)
+end sub
+
+'********************* MP3 Volume *********************
+sub MP3Vol(VolSend)             ' Volume = 1 - 30
+Cmd(4) = 0x06                   ' Set volume command
+Cmd(7) = VolSend                ' Volume parameter 1 - 30
+MP3SendCmd                      ' Send the 10 byte command (last subroutine below)
+end sub
+
+'*************** Get Data from MP3 ********************
+sub MP3GetData
+' this happens every time there is a byte ready in the USART RX register if IntOn
+' in this case... 10 times (the 10 bytes in RecData array)
+
+hserreceive(RecData(IndexPtr))   'get a byte and put into array at index pointer position
+IndexPtr = IndexPtr + 1          'increment index pointer
+end sub
+
+'****************** MP3 Send Command ******************
+sub MP3SendCmd
+' first figure out checksum for current command...
+
+CmdAdd = 0                      ' Set total of added up command bytes to 0
+for XX = 2 TO 7                 ' Add up command bytes 2 - 7
+CmdAdd = CmdAdd + Cmd(XX)       ' CmdAdd = word
+next XX
+CheckSum = 0 - CmdAdd           ' Get MSB, LSB (word) and subtract from 0 = checksum
+Cmd(8) = CheckSum_H             ' Get MSB and put in 8th command byte
+Cmd(9) = CheckSum               ' Get LSB and put in 9th command byte
+
+' then send all 10 bytes of command to MP3 module
+for YY = 1 to 10
+HSerSend Cmd(YY)
+next YY
+end sub
