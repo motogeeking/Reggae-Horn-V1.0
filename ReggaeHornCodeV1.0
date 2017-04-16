@@ -60,7 +60,7 @@
 #define HornSw portA.2          ' Pin 5  A.2, Horn switch input from opto -> low = on
 #define MP3Busy portA.3         ' Pin 4  A.3, Busy line from MP3 -> low = busy
 
-#define LED portA.5             ' Pin 2
+'#define LED portA.5             ' Pin 2  Used for testing only. Not Needed.
 
 #define USART_BAUD_RATE 9600    ' Initializes USART port with 9600 baud
 #define USART_BLOCKING          ' wait for USART to finish receiving or transmitting
@@ -69,7 +69,7 @@ dir TX out                      ' Set pin 7 to output - TX out to MP3 module RX
 dir RX in                       ' Set pin 6 to input - RX in from MP3 module TX
 dir MP3Busy in                  ' Set pin 4 to input
 dir HornSw in                   ' Set pin 5 to input
-dir LED out
+'dir LED out
 
 On Interrupt UsartRX1Ready call MP3GetData 'Set up interrupt for receiving data
 IntOff                          ' Turn interrupt off until needed
