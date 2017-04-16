@@ -27,7 +27,7 @@
 '*  3 different things... change the horn volume, select one of possibly   *
 '*  many horn sounds and of course, as a button to activate the horn.      *
 '*                                                                         *
-'*  Pressing and holing the horn button while turning the power (key) on   *
+'*  Pressing and holding the horn button while turning the power (key) on  *
 '*  will allow you to change the horn sound volume. As you keep holding    *
 '*  the button, the unit will play the horn sound for one second and stop, *
 '*  then increase the volume a bit and play the horn sound again. It will  *
